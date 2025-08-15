@@ -9,8 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
+
     networks:
       - airflow_net
 
@@ -20,8 +19,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
-    ports:
-      - "5050:80"
+
     depends_on:
       - postgres
     networks:
@@ -44,8 +42,7 @@ services:
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
     volumes:
       - ./dags:/opt/airflow/dags
-    ports:
-      - "8080:8080"
+
     command: >
       bash -c "
       airflow db migrate &&
@@ -58,8 +55,7 @@ services:
   # Metabase for dashboard and visualization
   metabase:
     image: metabase/metabase
-    ports:
-      - "3000:3000"
+
     depends_on:
       - postgres
     networks:
