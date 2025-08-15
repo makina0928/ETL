@@ -31,6 +31,10 @@ services:
     networks:
       - airflow_net
 
+
+
+
+
   # Apache Airflow for scheduling and ETL logic
   airflow:
     image: apache/airflow:2.9.1-python3.11
@@ -44,6 +48,7 @@ services:
       AIRFLOW__WEBSERVER__DEFAULT_USER_PASSWORD: ${AIRFLOW_PASSWORD}
       AIRFLOW__WEBSERVER__BASE_URL: https://${AIRFLOW_HOST}
       AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"   # speeds up startup
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -51,19 +56,36 @@ services:
     volumes:
       - ./dags:/opt/airflow/dags
     command: >
-      bash -c "
-      airflow db migrate &&
-      airflow users create --username ${AIRFLOW_USER} --password ${AIRFLOW_PASSWORD} --firstname Airflow --lastname Admin --role Admin --email admin@example.com &&
-      airflow webserver & airflow scheduler
+      bash -lc "
+        airflow db migrate &&
+        airflow users create --username ${AIRFLOW_USER} --password ${AIRFLOW_PASSWORD} \
+          --firstname Airflow --lastname Admin --role Admin --email admin@example.com \
+          || echo 'User already exists' &&
+        airflow webserver & exec airflow scheduler
       "
+    healthcheck:
+      test: ["CMD-SHELL","curl -sf http://localhost:8080/health | grep -q 'healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     labels:
       - traefik.enable=true
       - traefik.http.routers.airflow.rule=Host(`${AIRFLOW_HOST}`)
       - traefik.http.routers.airflow.entrypoints=websecure
       - traefik.http.routers.airflow.tls=true
       - traefik.http.services.airflow.loadbalancer.server.port=8080
+      - traefik.http.services.airflow.loadbalancer.healthcheck.path=/health
+      - traefik.http.services.airflow.loadbalancer.healthcheck.interval=10s
+      # If Traefik can’t reach your service due to networks, uncomment and set the correct network:
+      # - traefik.docker.network=airflow_net
     networks:
       - airflow_net
+
+
+
+
+
+
 
   # Metabase for dashboard and visualization
   metabase:
