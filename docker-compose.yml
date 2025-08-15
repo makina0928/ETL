@@ -36,50 +36,33 @@ services:
 
 
   # Apache Airflow for scheduling and ETL logic
-  airflow:
-    image: apache/airflow:2.9.1-python3.11
-    restart: always
-    depends_on:
-      - postgres
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
-      AIRFLOW__WEBSERVER__DEFAULT_USER_USERNAME: ${AIRFLOW_USER}
-      AIRFLOW__WEBSERVER__DEFAULT_USER_PASSWORD: ${AIRFLOW_PASSWORD}
-      AIRFLOW__WEBSERVER__BASE_URL: https://${AIRFLOW_HOST}
-      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"   # speeds up startup
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
-    volumes:
-      - ./dags:/opt/airflow/dags
-    command: >
-      bash -lc "
-        airflow db migrate &&
-        airflow users create --username ${AIRFLOW_USER} --password ${AIRFLOW_PASSWORD} \
-          --firstname Airflow --lastname Admin --role Admin --email admin@example.com \
-          || echo 'User already exists' &&
-        airflow webserver & exec airflow scheduler
-      "
-    healthcheck:
-      test: ["CMD-SHELL","curl -sf http://localhost:8080/health | grep -q 'healthy'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.airflow.rule=Host(`${AIRFLOW_HOST}`)
-      - traefik.http.routers.airflow.entrypoints=websecure
-      - traefik.http.routers.airflow.tls=true
-      - traefik.http.services.airflow.loadbalancer.server.port=8080
-      - traefik.http.services.airflow.loadbalancer.healthcheck.path=/health
-      - traefik.http.services.airflow.loadbalancer.healthcheck.interval=10s
-      # If Traefik can’t reach your service due to networks, uncomment and set the correct network:
-      # - traefik.docker.network=airflow_net
-    networks:
-      - airflow_net
+# ---------- Airflow common (v3) ----------
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.1}
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # Running behind Traefik (Coolify)
+    AIRFLOW__API__BASE_URL: https://${AIRFLOW_HOST}
+    AIRFLOW__API__ENABLE_PROXY_FIX: "true"
+    # Your app secrets
+    OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+    # Optional: extra pip reqs at start (better to bake into image)
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - airflow_net
 
 
 
